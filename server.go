@@ -43,20 +43,24 @@ func handleClient(c net.Conn) {
 	log.Printf("Serving %s\n", c.RemoteAddr().String())
 
 	for {
-		netData, err := bufio.NewReader(c).ReadString('\n')
+		// READ
+		msg, err := bufio.NewReader(c).ReadString('\n')
 		if err != nil {
 			fmt.Println("Read error: client disconnected,", err)
 			return
 		}
-		log.Printf("From client (%s): %s", c.RemoteAddr().String(), netData)
+		log.Printf("From client (%s): %s", c.RemoteAddr().String(), msg)
 
-		temp := strings.TrimSpace(string(netData)) // TODO: Implement a function that actually processes the client message and creates a response.
+		// HANDLE
+		temp := strings.TrimSpace(string(msg)) // TODO: Implement a function that actually processes the client message and creates a response.
 		if temp == "STOP" {
 			break
 		}
 
+		// WRITE
 		c.Write([]byte("HELLO FROM SERVER")) // TODO: respond to client with the response created above.
 
-		time.Sleep(1 * time.Second) // TODO: change this to a more proper delay (60hz or 30hz or turnbased or whatever).
+		// DELAY
+		time.Sleep(2 * time.Second) // TODO: change this to a more proper delay (60hz or 30hz or turnbased or whatever).
 	}
 }

@@ -1,9 +1,13 @@
+import argparse
 import socket
 
+parser = argparse.ArgumentParser(description='http server address')
+parser.add_argument('--addr', default='127.0.0.1', help='Usage: --addr <ip>')
+parser.add_argument('--port', type=int,  default=8080, help='Usage: --port <port>')
+args = parser.parse_args()
+
 s = socket.socket()
-localhost = "127.0.0.1"
-port = 1234
-s.connect((localhost, port))
+s.connect((args.addr, args.port))
 
 # read and write
 def readWrite():
