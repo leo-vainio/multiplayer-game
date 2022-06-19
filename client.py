@@ -7,7 +7,8 @@ s.connect((localhost, port))
 
 # read and write
 def readWrite():
-    s.send(b'HI THERE\n')
-    print(s.recv(1024).decode())
+    while True:
+        s.send(b'HI THERE\n')
+        print(s.recv(1024).decode())
 
 readWrite()
