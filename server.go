@@ -20,7 +20,7 @@ type Color struct {
 type Player struct {
 	x      uint16
 	y      uint16
-	radius float32 // consider 64
+	radius float64
 	name   string
 	color  Color
 }
@@ -28,15 +28,17 @@ type Player struct {
 const (
 	width  int = 1440
 	height int = 900
-	hz         = 60.0
+	hz         = 15.0
 )
 
 const (
-	playerRad float32 = 10.0
+	playerRad float64 = 10.0
 	foodRad   float32 = 7.0
 )
 
 var players []Player
+var numPlayers byte = 0
+var status byte = 0
 
 // main initializes server and starts listening for clients.
 func main() {
@@ -82,64 +84,21 @@ func handleClient(c net.Conn) {
 		start := time.Now()
 
 		// ----- WRITE ----- //
-		err = binary.Write(c, binary.LittleEndian, byte(0)) // status
-		if err != nil {
-			fmt.Println("Error: status", err)
-			return
-		}
-
-		err = binary.Write(c, binary.LittleEndian, byte(1)) // player count
-		if err != nil {
-			fmt.Println("Error: count", err)
-			return
-		}
-
-		err = binary.Write(c, binary.LittleEndian, player.x) // x pos
-		if err != nil {
-			fmt.Println("Error: x:", err)
-		}
-
-		err = binary.Write(c, binary.LittleEndian, player.y) // y pos
-		if err != nil {
-			fmt.Println("Error: y", err)
-		}
-
-		err = binary.Write(c, binary.LittleEndian, player.color.r) // red
-		if err != nil {
-			fmt.Println("Error: Red", err)
-			return
-		}
-
-		err = binary.Write(c, binary.LittleEndian, player.color.g) // green
-		if err != nil {
-			fmt.Println("Error: Green", err)
-			return
-		}
-
-		err = binary.Write(c, binary.LittleEndian, player.color.b) // blue
-		if err != nil {
-			fmt.Println("Error: Blue", err)
-			return
-		}
-
-		err = binary.Write(c, binary.LittleEndian, player.radius) // radius
-		if err != nil {
-			fmt.Println("Error: radius", err)
-		}
-
-		c.Write([]byte(player.name)) // name
+		write(c)
 
 		// ----- READ ----- //
 		msg, err := bufio.NewReader(c).ReadString('\n')
 		if err != nil {
 			fmt.Printf("Read error: client (%s) disconnected, %s", c.RemoteAddr().String(), err)
-			return
+			removePlayer(idx)
+			break
 		}
-		log.Printf("From client (%s): %s", c.RemoteAddr().String(), msg)
+		log.Printf("From client (%s): %s", c.RemoteAddr().String(), msg) // TODO: remove
 
 		// ----- HANDLE ----- // start go-routine here? go func(idx, msg)
 		msg = strings.TrimSpace(string(msg))
 		if msg == "q" {
+			removePlayer(idx)
 			break
 		}
 
@@ -184,6 +143,7 @@ func initPlayer(rd *bufio.Reader) (Player, int, error) { // TODO: test that this
 		idx = len(players) - 1
 	}
 
+	numPlayers++
 	return player, idx, nil
 }
 
@@ -208,10 +168,26 @@ func readColor(rd *bufio.Reader) (byte, byte, byte, error) {
 	return r, g, b, nil
 }
 
-// remove efficiently and without spaces: the goroutine taking care of this player might need
-func remove(s []int, i int) []int {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1] // TODO: FIX THIS FUNCTION.
+// write writes game data to the client.
+func write(c net.Conn) {
+	binary.Write(c, binary.LittleEndian, status)     // status
+	binary.Write(c, binary.LittleEndian, numPlayers) // player count
 
-	// set removed player to Player{}
+	for _, p := range players {
+		if p != (Player{}) {
+			binary.Write(c, binary.LittleEndian, p.x)               // x
+			binary.Write(c, binary.LittleEndian, p.y)               // y
+			binary.Write(c, binary.LittleEndian, p.color.r)         // red
+			binary.Write(c, binary.LittleEndian, p.color.g)         // green
+			binary.Write(c, binary.LittleEndian, p.color.b)         // blue
+			binary.Write(c, binary.LittleEndian, float32(p.radius)) // radius
+			c.Write([]byte(p.name))                                 // name
+		}
+	}
+}
+
+// removePlayer removes a player from the game.
+func removePlayer(idx int) {
+	players[idx] = Player{}
+	numPlayers--
 }

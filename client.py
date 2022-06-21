@@ -94,8 +94,14 @@ def handle_menu():
         
 # draw_game draws all game components to the screen (background, players, food, scoreboard, etc)
 def draw_game():
+    pygame.display.update()
+
+def draw_background():
     WIN.blit(BACKGROUND, (0,0))
-    pygame.display.update()    
+
+# draw_player draws a single player onto the screen.
+def draw_player(x, y, color, rad, name):
+    pygame.draw.circle(WIN, color, (x, y), rad, 0)
 
 
 def main():
@@ -107,9 +113,11 @@ def main():
         response = ""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                response = 'q'
+                s.send(('q\n').encode())
+                running = False
                 pygame.quit()
-                break
+                return
+                
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT:
                     response += 'l'
@@ -124,22 +132,39 @@ def main():
 
                 
         
+        draw_background()
+        
+        ##### READ #####
+        status = int.from_bytes(s.recv(1), "little")
+        print("status: ", status)
+
+        num_players = int.from_bytes(s.recv(1), "little")
+        print("amount of players: ", num_players) 
+
+        for _ in range(num_players):
+            x = int.from_bytes(s.recv(2), "little")
+            y = int.from_bytes(s.recv(2), "little")
+            print("x: ", x, " y: ", y)
+
+            r = int.from_bytes(s.recv(1), "little")
+            g = int.from_bytes(s.recv(1), "little")
+            b = int.from_bytes(s.recv(1), "little")
+            print("r: ", r, " g: ", g, " b: ", b)
+       
+            [rad] = struct.unpack('f', s.recv(4))
+            print("rad:", rad)
+
+            name = "" # TODO: implement more efficiently
+            while not name.endswith('\n'):
+                name += s.recv(1).decode()
+            print(name) 
+
+            draw_player(x, y, (r, g, b), rad, name)
+            
         
         
-        # READ
-        print("status: ", int.from_bytes(s.recv(1), "little"))
-        print("amount of players: ", int.from_bytes(s.recv(1), "little")) # TODO: use this variable in loop ofc
-        print("x: ", int.from_bytes(s.recv(2), "little"))
-        print("y: ", int.from_bytes(s.recv(2), "little"))
-        print("r: ", int.from_bytes(s.recv(1), "little"))
-        print("g: ", int.from_bytes(s.recv(1), "little"))
-        print("b: ", int.from_bytes(s.recv(1), "little"))
-        [x] = struct.unpack('f', s.recv(4))
-        print("rad:", x)
-        print(s.recv(64).decode())
-        
-        print("res:", response)
-        # WRITE
+
+        ##### WRITE #####
         s.send((response + '\n').encode())
 
         draw_game()
