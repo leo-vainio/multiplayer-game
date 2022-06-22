@@ -101,16 +101,27 @@ def draw_player(x, y, color, rad, name):
     name_text = GAME_NAME_FONT.render(name[:-1], 1, BLACK)
     WIN.blit(name_text, (x - name_text.get_width()/2, y - name_text.get_height()/2))
 
+def draw_food(x, y, color, rad):
+    pygame.draw.circle(WIN, color, (x, y), rad, 0)
+
 # read_and_draw_game recieves game data from server and draws the updated game onto the screen.
 def recv_and_draw_game():
     WIN.blit(BACKGROUND, (0,0))
 
     status = int.from_bytes(s.recv(1), "little")
-    print("status: ", status)
+    num_food = int.from_bytes(s.recv(1), "little")
+    for _ in range(num_food):
+        x = int.from_bytes(s.recv(2), "little") # does not get read
+        y = int.from_bytes(s.recv(2), "little")
+
+        r = int.from_bytes(s.recv(1), "little")
+        g = int.from_bytes(s.recv(1), "little")
+        b = int.from_bytes(s.recv(1), "little")
+        [rad] = struct.unpack('f', s.recv(4))
+
+        draw_food(x, y, (r, g, b), rad)
 
     num_players = int.from_bytes(s.recv(1), "little")
-    print("amount of players: ", num_players) 
-
     for _ in range(num_players):
         x = int.from_bytes(s.recv(2), "little")
         y = int.from_bytes(s.recv(2), "little")
@@ -144,19 +155,22 @@ def main():
                 return
                 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    response += 'l'
-                if event.key == pygame.K_RIGHT:
-                    response += 'r'
-                if event.key == pygame.K_UP:
-                    response += 'u'
-                if event.key == pygame.K_DOWN:
-                    response += 'd'
                 if event.key == pygame.K_SPACE:
                     pass # TODO: implement
 
+        keys_pressed = pygame.key.get_pressed()
+        if keys_pressed[pygame.K_LEFT]:
+            response += 'l'
+        if keys_pressed[pygame.K_RIGHT]: 
+            response += 'r'
+        if keys_pressed[pygame.K_UP]:
+            response += 'u'
+        if keys_pressed[pygame.K_DOWN]:
+            response += 'd'
+
         recv_and_draw_game()
             
+        print(response)
         s.send((response + '\n').encode())
         
 
@@ -166,33 +180,21 @@ if __name__ == "__main__":
 
 ##### TODO LIST #####
 
-# - A menu where the client enters its username, this name is displayed in the balls that are the user!
 # - have some sort of enemy or dangerous obstacle that blows up the ball just like agar
 # - space splits ur ball (serverside)
-# - protocol, how will the data look? for example. send info about the players (kind of an array) followed by food (as array of positions) followed by enemies/obstacles (as array of positions and type)
-# - the protocol needs some sort of way of handling varied amount of players. so example haave an integer (byte, since it probs wont be more than 255 players lmao) that says how many players there are first so client knows how to read data.
-# - The client decides how to draw and display the game data but cant manipulate the game in any other way than sending key input to the server.
 # - player info list should be displayed that describes how big everyone is in order from biggest to smallest. how many players there are and so on.
 # - a player should be able to rejoin/respawn, being prompted to enter nickname again, with the old one being prefilled.
-# - a player should be able to choose its color. maybe if i wanna play with this more i can add image support also.
 # - if a player leaves blow it up and create food that goes in some directions -> food need a velocity
 # - also blow up player if it hits obstacle. but maybe dont kill player then
 # - hitboxes
 # - maybe draw the biggest player last? so that it looks like the biggest player eats the smaller
 # - also draw food first. 
-# - how do we optimize by not redrawing every food item every time? do we have to? probably have to if we are repainting the background every time
 # - having an async function that plays background sound MAYBE
 # - bots if not enough players has joined. remove these when players join. i.e cap them
 # - WINNING CONDITION: when a player gets too big i guess.
 # - consider how much the player should grow when it eats another player and when it eats food.
-# - randomize players starting position, making them not spawn on another player. 
-# - maybe read in the first byte as some sort of status signal to the client. (game, menu, gameover...)
-# - client should be able to send "quit" as an option for a smoother shutdown.
-# - implement a reroll color option in menu
 # - ball text should probs change size when ball is bigger or smaller.
-# - Changing text color implementation
 # - Work with surfaces in menu to easier make changes to stuff, for example the textfield can be a surface isntead of different items. just to clean up that function cause its ugly af
-# - nothing stops the client from sending weird characters. so make sure the server dont crash on weird input.
 
 # You need to regularly make a call to one of four functions in the pygame.event module in order for pygame to internally interact with your OS. Otherwise the OS will think your game has crashed. So make sure you call one of these:
 
