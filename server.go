@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"os"
@@ -28,7 +29,7 @@ type Player struct {
 const (
 	width  int = 1440
 	height int = 900
-	hz         = 15.0
+	hz         = 60.0
 )
 
 const (
@@ -83,6 +84,8 @@ func handleClient(c net.Conn) {
 	for {
 		start := time.Now()
 
+		// if player is nil do something: doesnt mean player has left necessarily.
+
 		// ----- WRITE ----- //
 		write(c)
 
@@ -93,14 +96,54 @@ func handleClient(c net.Conn) {
 			removePlayer(idx)
 			break
 		}
-		log.Printf("From client (%s): %s", c.RemoteAddr().String(), msg) // TODO: remove
 
-		// ----- HANDLE ----- // start go-routine here? go func(idx, msg)
-		msg = strings.TrimSpace(string(msg))
-		if msg == "q" {
-			removePlayer(idx)
-			break
-		}
+		// ----- HANDLE ----- //
+		go func(msg string, idx int) { // TODO: move to separate function.
+			if len(msg) > 6 {
+				return
+			}
+			msg = strings.TrimSpace(string(msg))
+			l, r, u, d, s := false, false, false, false, false
+			for _, v := range msg {
+				switch string(v) {
+				case "l":
+					l = true
+				case "r":
+					r = true
+				case "u":
+					u = true
+				case "d":
+					d = true
+				case "s":
+					s = true // TODO: implement
+					fmt.Print(s)
+				default:
+					log.Println("Client sent invalid character!")
+				}
+			}
+			vel := uint16(10)
+			if l {
+				go func() {
+					players[idx].x -= vel
+				}()
+			}
+			if r {
+				go func() {
+					players[idx].x += vel
+				}()
+			}
+			if u {
+				go func() {
+					players[idx].y -= vel
+				}()
+			}
+			if d {
+				go func() {
+					players[idx].y += vel
+				}()
+			}
+
+		}(msg, idx)
 
 		elapsed := time.Since(start)
 		// fmt.Println("sleep: ", update-elapsed) // for testing efficiency TODO: remove
@@ -108,7 +151,51 @@ func handleClient(c net.Conn) {
 	}
 }
 
-func initPlayer(rd *bufio.Reader) (Player, int, error) { // TODO: test that this actually works properly when adding more players and when players have been removed and such.
+// ballWallCollision checks if x, y with the default radius is within the screens boundaries.
+func ballWallCollision(x, y int) bool {
+	if x-int(playerRad) < 0 {
+		return true
+	} else if x+int(playerRad) > width {
+		return true
+	} else if y-int(playerRad) < 0 {
+		return true
+	} else if y+int(playerRad) > height {
+		return true
+	}
+	return false
+}
+
+// randStartPos finds a random spawning position for a player where no other player currently is.
+func randStartPos() (x, y int) {
+	for {
+		x = rand.Intn(width)
+		y = rand.Intn(height)
+
+		if ballWallCollision(x, y) {
+			continue
+		}
+
+		found := false
+		for _, p := range players {
+			if p != (Player{}) {
+				distX := x - int(p.x)
+				distY := y - int(p.y)
+				distance := math.Sqrt(float64(distX*distX) + float64(distY*distY))
+
+				if distance <= (playerRad + p.radius) { // circles collide
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			break
+		}
+	}
+	return
+}
+
+func initPlayer(rd *bufio.Reader) (Player, int, error) {
 	r, g, b, err := readColor(rd)
 	if err != nil {
 		log.Println("Read error: color")
@@ -120,8 +207,7 @@ func initPlayer(rd *bufio.Reader) (Player, int, error) { // TODO: test that this
 		return Player{}, 0, err
 	}
 
-	x := rand.Intn(width)  // TODO: make sure no other player is in this position (or close) -> new function for this
-	y := rand.Intn(height) // TODO: make sure no other player is in this position (or close) -> new function for this
+	x, y := randStartPos() // TODO: fix
 
 	player := Player{x: uint16(x), y: uint16(y), radius: playerRad, name: name, color: Color{r, g, b}}
 

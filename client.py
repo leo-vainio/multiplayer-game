@@ -28,8 +28,10 @@ MENU_HEADER_FONT = pygame.font.SysFont('couriernew', 120)
 MENU_NAME_FONT = pygame.font.SysFont('couriernew', 30)
 MENU_HELP_FONT = pygame.font.SysFont('couriernew', 20)
 
+
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+
 
 # draw_menu draws all necessary components to the menu screen.
 def draw_menu(name, color):
@@ -91,17 +93,41 @@ def handle_menu():
 
         draw_menu(name, (R, G, B))
         
-        
-# draw_game draws all game components to the screen (background, players, food, scoreboard, etc)
-def draw_game():
-    pygame.display.update()
-
-def draw_background():
-    WIN.blit(BACKGROUND, (0,0))
-
 # draw_player draws a single player onto the screen.
 def draw_player(x, y, color, rad, name):
     pygame.draw.circle(WIN, color, (x, y), rad, 0)
+
+    GAME_NAME_FONT = pygame.font.SysFont('couriernew', int(rad)//2)
+    name_text = GAME_NAME_FONT.render(name[:-1], 1, BLACK)
+    WIN.blit(name_text, (x - name_text.get_width()/2, y - name_text.get_height()/2))
+
+# read_and_draw_game recieves game data from server and draws the updated game onto the screen.
+def recv_and_draw_game():
+    WIN.blit(BACKGROUND, (0,0))
+
+    status = int.from_bytes(s.recv(1), "little")
+    print("status: ", status)
+
+    num_players = int.from_bytes(s.recv(1), "little")
+    print("amount of players: ", num_players) 
+
+    for _ in range(num_players):
+        x = int.from_bytes(s.recv(2), "little")
+        y = int.from_bytes(s.recv(2), "little")
+
+        r = int.from_bytes(s.recv(1), "little")
+        g = int.from_bytes(s.recv(1), "little")
+        b = int.from_bytes(s.recv(1), "little")
+    
+        [rad] = struct.unpack('f', s.recv(4))
+
+        name = "" # TODO: implement more efficiently (with a buffer for example)
+        while not name.endswith('\n'):
+            name += s.recv(1).decode()
+
+        draw_player(x, y, (r, g, b), rad, name)
+
+    pygame.display.update()
 
 
 def main():
@@ -113,7 +139,6 @@ def main():
         response = ""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                s.send(('q\n').encode())
                 running = False
                 pygame.quit()
                 return
@@ -130,44 +155,9 @@ def main():
                 if event.key == pygame.K_SPACE:
                     pass # TODO: implement
 
-                
-        
-        draw_background()
-        
-        ##### READ #####
-        status = int.from_bytes(s.recv(1), "little")
-        print("status: ", status)
-
-        num_players = int.from_bytes(s.recv(1), "little")
-        print("amount of players: ", num_players) 
-
-        for _ in range(num_players):
-            x = int.from_bytes(s.recv(2), "little")
-            y = int.from_bytes(s.recv(2), "little")
-            print("x: ", x, " y: ", y)
-
-            r = int.from_bytes(s.recv(1), "little")
-            g = int.from_bytes(s.recv(1), "little")
-            b = int.from_bytes(s.recv(1), "little")
-            print("r: ", r, " g: ", g, " b: ", b)
-       
-            [rad] = struct.unpack('f', s.recv(4))
-            print("rad:", rad)
-
-            name = "" # TODO: implement more efficiently
-            while not name.endswith('\n'):
-                name += s.recv(1).decode()
-            print(name) 
-
-            draw_player(x, y, (r, g, b), rad, name)
+        recv_and_draw_game()
             
-        
-        
-
-        ##### WRITE #####
         s.send((response + '\n').encode())
-
-        draw_game()
         
 
 if __name__ == "__main__":
