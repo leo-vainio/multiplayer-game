@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,6 +25,11 @@ type Player struct {
 	rad   float32
 	name  string
 	color Color
+}
+
+type Players struct {
+	mu      sync.Mutex
+	players []Player
 }
 
 type Food struct {
@@ -42,6 +48,8 @@ const (
 const (
 	playerRad float32 = 25.0
 	foodRad   float32 = 7.0
+	maxRad    float32 = 400.0
+	numFood   byte    = 50
 )
 
 var players []Player
@@ -50,7 +58,10 @@ var status byte = 0 // TODO: make const enum
 
 var food []Food
 
-const numFood byte = 50
+// init seeds the rng.
+func init() {
+	rand.Seed(time.Now().UTC().UnixNano())
+}
 
 // main initializes server and starts listening for clients.
 func main() {
@@ -86,7 +97,6 @@ func initMap() {
 	for i := range food {
 		food[i] = newFood()
 	}
-	go handleFood()
 }
 
 // newFood creates a new food item with a random position on the screen.
@@ -96,20 +106,42 @@ func newFood() Food {
 	return Food{uint16(x), uint16(y), foodRad, color}
 }
 
-// handleFood checks whether players have collided with food and spawns new food.
-func handleFood() { // TODO: make concurrent with splitting up the food list into 5 or similar.
-	for {
-		for i, f := range food {
-			for j, p := range players {
-				distX := p.x - float32(f.x)
-				distY := p.y - float32(f.y)
-				distance := math.Sqrt(float64(distX*distX) + float64(distY*distY))
+// handleFoodCollsion checks if a player has eaten a food item.
+func handleFoodCollision(idx int) {
+	for i, f := range food {
+		distX := players[idx].x - float32(f.x)
+		distY := players[idx].y - float32(f.y)
+		distance := math.Sqrt(float64(distX*distX) + float64(distY*distY))
 
-				if distance+float64(f.rad) <= float64(p.rad) {
-					food[i] = newFood()
-					players[j].rad = combinedRad(float64(p.rad), float64(f.rad)) // TODO: see if data race is an issue.
-				}
-			}
+		if distance+float64(f.rad) <= float64(players[idx].rad) {
+			food[i] = newFood()
+			players[idx].rad = combinedRad(float64(players[idx].rad), float64(f.rad)) // TODO: see if data race is an issue.
+			fmt.Println(time.Now(), "HI")
+		}
+	}
+}
+
+// handlePlayerCollision checks if a player has eaten another player.
+func handlePlayerCollision(idx int) {
+	for i, p := range players {
+		if players[idx].rad <= p.rad {
+			continue
+		}
+		if i == idx {
+			continue
+		}
+		if p == (Player{}) {
+			continue
+		}
+
+		distX := players[idx].x - p.x
+		distY := players[idx].y - p.y
+		distance := math.Sqrt(float64(distX*distX) + float64(distY*distY))
+
+		// mutex on players[i] both clients are writing this player so
+		if distance+float64(p.rad) <= float64(players[idx].rad) {
+			players[idx].rad = combinedRad(float64(players[idx].rad), float64(p.rad)) // TODO: see if data race is an issue.
+			// players[i] = Player{}
 		}
 	}
 }
@@ -136,6 +168,8 @@ func handleClient(c net.Conn) {
 	for {
 		start := time.Now()
 
+		fmt.Println("in handler", idx)
+
 		write(c)
 		msg, err := bufio.NewReader(c).ReadString('\n')
 		if err != nil {
@@ -143,10 +177,10 @@ func handleClient(c net.Conn) {
 			removePlayer(idx)
 			break
 		}
-		go handleMessage(msg, idx)
+		handleMessage(msg, idx)
 
 		elapsed := time.Since(start)
-		fmt.Println("sleep: ", updateTime-elapsed)
+		// fmt.Println("sleep: ", updateTime-elapsed)
 		time.Sleep(updateTime - elapsed)
 	}
 }
@@ -223,8 +257,8 @@ func writeColor(c net.Conn, color Color) {
 }
 
 // writeRadius writes a circle radius to the client.
-func writeRad(c net.Conn, r float32) {
-	binary.Write(c, binary.LittleEndian, r)
+func writeRad(c net.Conn, rad float32) {
+	binary.Write(c, binary.LittleEndian, rad)
 }
 
 // writeString writes a newline-ended string to the client.
@@ -293,6 +327,8 @@ func movePlayer(idx int, dx, dy float32) {
 	}
 	players[idx].x = newX // TODO: solve potential data race
 	players[idx].y = newY // TODO: solve potential data race
+	handleFoodCollision(idx)
+	handlePlayerCollision(idx)
 }
 
 // removePlayer removes a player from the game.
